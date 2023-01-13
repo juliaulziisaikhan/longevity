@@ -2,7 +2,9 @@
 
 > The causes of death are numerous, yet the causes of life are few.[^1]
 
-A exploratory project aiming to compare the longevity of various groups. They include Tibetan lamas and figures, Chinese civil servants and bureaucrats, Chinese monks, and European monks and figures.
+A exploratory project aiming to compare the longevity of various groups. 
+
+Our sample includes Tibetan lamas and figures, Chinese civil servants and bureaucrats, Chinese monks, and European monks and figures.
 
 * Buddhist Digital Resource Center (BDRC), [Boston](https://www.bdrc.io/)
 * Treasury of Lives (ToL), [New York](https://treasuryoflives.org/)
