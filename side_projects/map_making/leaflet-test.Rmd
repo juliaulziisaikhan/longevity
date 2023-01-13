@@ -1,0 +1,29 @@
+---
+title: "leaflet test"
+author: "Edgardo Zelaya"
+date: "2022-09-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(leaflet)
+library(shiny)
+library(janitor)
+```
+
+
+```{r}
+nypd <-  read.csv("C:/Users/Edgardo/Downloads/nypd_arrests.csv") %>% clean_names()
+sample <- sample_n(nypd, 100)
+head(nypd)
+str(nypd)
+unique(nypd$perp_race)
+
+leaflet(sample) %>% addTiles() %>% addMarkers(popup = paste("Date:", sample$arrest_date, "<br>",
+                                                                              "Offense:", sample$ofns_desc, "<br>",
+                                                                              "Age:", sample$age_group, "<br>",
+                                                                              "Sex:", sample$perp_sex, "<br>",
+                                                                              "Race:", sample$perp_race))
+```
+

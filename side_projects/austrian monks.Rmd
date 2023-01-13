@@ -1,0 +1,37 @@
+---
+title: "austrian monk data"
+author: "Edgardo Zelaya"
+date: "2022-09-15"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(caret)
+```
+
+```{r}
+am <- read.csv("C:/Users/Edgardo/Downloads/austrian_monks.csv")
+head(am)
+str(am)
+sum(am$born_on != "")
+sum(am$born_not_earlier != "")
+sum(am$born_not_later != "")
+sum(am$died_on != "")
+sum (am$died_not_earlier != "")
+sum(am$died_not_later != "")
+#filter(am, accurate_birth != "" & born_on != ""
+#am$accurate <- ifelse(am$born_on != "" & am$born)
+am <- am %>% mutate(accurate_birth = ifelse(born_on !="", T,F),
+                    accurate_death = ifelse(died_on != "", T, F))
+print(am)
+am <- am %>% mutate(birth_record = ifelse(born_on !="" | born_not_later != "" | born_not_earlier !="", T, F),
+                    death_record = ifelse(died_on != "" | died_not_later != "" | died_not_earlier !="", T, F),
+                    complete_record = ifelse(birth_record == T & death_record == T, T, F))
+to <- am %>% filter(complete_record == TRUE) %>% group_by(occupations) %>% summarize(frequency = n()) %>% arrange(desc(frequency))
+print(to)
+sum(to$frequency)
+confusionMatrix(reference = as.factor(am$accurate_birth), data =as.factor(am$accurate_death))
+```
+There are 3,478 rows. There are 563 (16.18%) records with accurate birth dates and 55 (1.58%) with accurate death dates. There are 0 rows that contain both information. There are 648 (18.6%) records with complete records. 

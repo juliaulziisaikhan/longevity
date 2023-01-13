@@ -1,0 +1,232 @@
+---
+title: "Wikidata Processing"
+author: "Julia Ulziisaikhan"
+date: "3/30/2022"
+output: html_document
+---
+
+```{r, warning=F, error=F}
+## this is a test tonkatsu and penguin foreva <3
+
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+setwd("C:/Users/ulzii/OneDrive/Documents/spring22/tuttle/")
+```
+
+```{r}
+generals <- 
+  read_excel("wikidata_generals.xlsx") %>%
+  mutate(birthdate = gsub("T00:00:00Z", "", birthdate),
+         deathdate = gsub("T00:00:00Z", "", deathdate)) %>%
+  `colnames<-`(c("url", "name", "birthdate", "deathdate", "yob", "yod", "birthplace", "coord", "country", "continent"))
+
+generals$occupation <- "general"
+
+scientists <- 
+  read_excel("wikidata_scientists.xlsx") %>%
+  mutate(birthdate = gsub("T00:00:00Z", "", birthdate),
+         deathdate = gsub("T00:00:00Z", "", deathdate)) %>%
+  `colnames<-`(c("url", "name", "birthdate", "deathdate", "yob", "yod", "birthplace", "coord", "country", "continent"))
+
+scientists$occupation <- "scientist"
+```
+
+```{r}
+df <- rbind(generals, scientists) %>% 
+  distinct(url, .keep_all = TRUE) %>% 
+  filter(yob > 999) %>%
+  mutate(age = yod - yob) %>%
+  filter(!is.na(age)) %>%
+  arrange(yob) 
+```
+
+
+```{r}
+head(df)
+```
+
+```{r}
+df %>%
+  group_by(occupation) %>%
+  summarise(number_of_rows = n()) %>%
+  mutate(pct = ((number_of_rows / nrow(df))*100) %>% round(2))
+```
+
+There are about 10,000 rows of Wikidata for both generals and scientists, comprising of a total of about 20,000 rows.
+
+```{r}
+print("Percentage of NA values by each column in %")
+colSums((is.na(df) / nrow(df))*100) %>%
+  round(4) %>%
+  format(scientific=F)
+```
+
+# Country / Continents Problem
+
+We see that the columns all have data, except for the continent column, where it is empty 80% of the time. Let's work on this.
+
+```{r}
+country_data <- 
+  read.csv("https://raw.githubusercontent.com/dbouquin/IS_608/master/NanosatDB_munging/Countries-Continents.csv") %>%
+  janitor::clean_names()
+
+country_data %>%
+  group_by(continent) %>%
+  sample_n(1)
+```
+
+Here is a data set of country names and their respective continents. This may get tricky as some of the country fields in the Wikidata is written as "Republic of..." or, generally, the long form. Nevertheless, let's try a join.
+
+```{r}
+na_counter <- function(data=df, column="continent"){
+  nrow <- nrow(data)
+  prop <- (data %>% pull(column) %>% is.na() %>% sum()) / nrow
+  return(prop)
+}
+
+left_join(select(df, -continent), country_data, by="country") %>% 
+  na_counter(column="continent")
+```
+
+```{r}
+left_join(select(df, -continent), country_data, by="country") %>%
+  group_by(country) %>%
+  summarise(nas = sum(is.na(continent))) %>%
+  arrange(-nas) %>%
+  filter(nas != 0)
+```
+
+# Basic analysis
+
+```{r}
+mu <- df %>% group_by(occupation) %>% summarize(grp.mean = mean(age, na.rm=TRUE))
+mu
+```
+
+## Density curves of age
+
+```{r, warning=F}
+# white bar may come from warning message
+ggplot(df, aes(x=age, fill=occupation)) +
+  geom_density(alpha=0.4) +
+  scale_x_continuous(breaks = seq(0, 110, 10), limits=c(0,110), expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(0.01, 0.04, 0.01), limits=c(0,0.03), expand = c(0, 0)) +
+  theme_bw()+facet_grid(occupation ~ .) +
+  geom_vline(data=mu, aes(xintercept=grp.mean, color="Mean"),
+             linetype=1)+
+  labs(title="Lifespan density curve, by data source",x="Lifespan in Years", y = "Density") +
+  theme(plot.title = element_text(hjust = 0.5),plot.background = element_rect(fill = "grey90"))
+  
+```
+
+## Countries with the most rows
+
+```{r}
+df %>% group_by(country) %>% summarise(n = n()) %>% arrange(-n) %>% top_n(20, n)
+```
+
+## Histogram of birth year and death year to get sense of data balance
+
+### Birth year 
+
+```{r}
+ggplot(df, aes(x=yob, fill=occupation)) +
+  geom_density(alpha=0.4) +
+  scale_x_continuous(breaks = seq(1000, 2022, 100), limits=c(1000, 2022), expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(0.005, 0.02, 0.005), limits=c(0,0.02), expand = c(0, 0)) +
+  theme_bw()+facet_grid(occupation ~ .) +
+  labs(title="Lifespan density curve, by data source",x="Lifespan in Years", y = "Density") +
+  theme(plot.title = element_text(hjust = 0.5),plot.background = element_rect(fill = "grey90"))
+```
+
+
+```{r}
+ggplot(df, aes(x=yob, fill=occupation, color=occupation)) +
+  geom_histogram(position="identity", alpha=0.2, bins=20) +
+  facet_grid(occupation ~ .) +
+  scale_x_continuous(breaks = seq(1000, 2022, 100), limits=c(1000, 2022), expand = c(0, 0))
+```
+
+### Death year 
+
+```{r}
+ggplot(df, aes(x=yod, fill=occupation)) +
+  geom_density(alpha=0.4) +
+  scale_x_continuous(breaks = seq(1000, 2022, 100), limits=c(1000, 2022), expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(0.005, 0.02, 0.005), limits=c(0,0.02), expand = c(0, 0)) +
+  theme_bw()+facet_grid(occupation ~ .) +
+  labs(title="Lifespan density curve, by data source",x="Lifespan in Years", y = "Density") +
+  theme(plot.title = element_text(hjust = 0.5),plot.background = element_rect(fill = "grey90"))
+```
+
+
+```{r}
+ggplot(df, aes(x=yod, fill=occupation, color=occupation)) +
+  geom_histogram(position="identity", alpha=0.2, bins=20) +
+  facet_grid(occupation ~ .) +
+  scale_x_continuous(breaks = seq(1000, 2022, 100), limits=c(1000, 2022), expand = c(0, 0))
+```
+
+## Our classic scatterplot
+
+```{r}
+# generals
+ggplot(data=filter(df, occupation == "general"), aes(x=yod, y=age, colour=occupation, fill=occupation)) + 
+  geom_point(alpha=0.2) +
+  geom_smooth(method="loess", fullrange=TRUE, color="black") +
+  labs(title="General Longevity Over Time") +
+  scale_x_continuous(breaks = seq(1000, 2022, 100), limits=c(1000,2022), name = "Year of Death", expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(10, 100, 10), limits=c(0,100), name = "Lifespan (Years)", expand = c(0, 0)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.background = element_rect(fill = "grey90"),
+        axis.text.x = element_text(size=9, angle=30, vjust = 1.25, hjust=1.1),
+        axis.line = element_line(colour = "black", size = 0.3, linetype = "solid"),
+        panel.background = element_rect(fill = "white", color='black'),
+        panel.grid.major = element_line(color = 'grey85', size=0.5),
+        panel.grid.minor = element_line(color = 'grey85', size=0.5)
+        ,        legend.position="bottom"
+        )
+```
+
+```{r}
+# scientists
+ggplot(data=filter(df, occupation == "scientist"), aes(x=yod, y=age, colour=occupation, fill=occupation)) + 
+  geom_point(alpha=0.2) +
+  geom_smooth(method="loess", fullrange=TRUE, color="black") +
+  labs(title="Scientist Longevity Over Time") +
+  scale_x_continuous(breaks = seq(1000, 2022, 100), limits=c(1000,2022), name = "Year of Death", expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(10, 100, 10), limits=c(0,100), name = "Lifespan (Years)", expand = c(0, 0)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.background = element_rect(fill = "grey90"),
+        axis.text.x = element_text(size=9, angle=30, vjust = 1.25, hjust=1.1),
+        axis.line = element_line(colour = "black", size = 0.3, linetype = "solid"),
+        panel.background = element_rect(fill = "white", color='black'),
+        panel.grid.major = element_line(color = 'grey85', size=0.5),
+        panel.grid.minor = element_line(color = 'grey85', size=0.5)
+        ,        legend.position="bottom"
+        )
+```
+
+```{r}
+# both
+ggplot(data=df, aes(x=yod, y=age, colour=occupation, fill=occupation)) + 
+  geom_point(alpha=0.2) +
+  geom_smooth(method="loess", fullrange=TRUE, color="black") +
+  labs(title="Longevity Over Time") +
+  scale_x_continuous(breaks = seq(1000, 2022, 100), limits=c(1000,2022), name = "Year of Death", expand = c(0, 0)) +
+  scale_y_continuous(breaks = seq(10, 100, 10), limits=c(0,100), name = "Lifespan (Years)", expand = c(0, 0)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.background = element_rect(fill = "grey90"),
+        axis.text.x = element_text(size=9, angle=30, vjust = 1.25, hjust=1.1),
+        axis.line = element_line(colour = "black", size = 0.3, linetype = "solid"),
+        panel.background = element_rect(fill = "white", color='black'),
+        panel.grid.major = element_line(color = 'grey85', size=0.5),
+        panel.grid.minor = element_line(color = 'grey85', size=0.5)
+        ,        legend.position="bottom"
+        )
+```
+

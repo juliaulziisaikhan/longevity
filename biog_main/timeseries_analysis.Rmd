@@ -1,0 +1,44 @@
+---
+title: "timeseries_analysis"
+author: "Julia Ulziisaikhan"
+date: "2/23/2022"
+output: html_document
+---
+
+```{r, warning=F, error=F}
+library(tidyverse)
+library(ggplot2)
+library(sqldf)
+library(RSQLite)
+library(lubridate)
+library(gt)
+library(scales)
+library(egg)
+setwd("C:/Users/ulzii/OneDrive/Documents/spring22/tuttle/")
+library(xts) #Eases handling of time series data
+library(forecast) #R Package by Rob Hyndman that augments many forecasting capabilities of R
+library(TTR) #Allows for decomposing time series data
+```
+
+'df' contains data from `ddm`,`cbdb`,`bdrc`
+```{r}
+df <- read.csv("C:/Users/ulzii/OneDrive/Documents/spring22/tuttle/biog_main/cbdb_ddm_bdrc.csv")
+str(df)
+
+cbdb <- df[df$data == "cbdb",] 
+```
+
+One thing to note when viewing the data is that the observations are recorded every other day. A workaround for this will be to aggregate the observations to a yearly level in which case we take the mean.
+
+```{r}
+#Add a variable which combines the year, month, and day variables into a single variable.
+seaice$Date <- as.Date(paste(seaice$Year, seaice$Month, seaice$Day, sep = "-"))
+
+#This converts the dataframe into an xts object
+seaice.xts <- xts(x = seaice$Extent, order.by = seaice$Date) 
+str(seaice.xts)
+
+#As mentioned previously, we need to aggregate this to monthly observations.  We will use the average of the observations when aggregating.
+cbdb.yearly <- apply.monthly(seaice.xts, mean) 
+```
+

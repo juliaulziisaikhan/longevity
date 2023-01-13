@@ -1,0 +1,327 @@
+---
+title: "Processing Biographical Data"
+author: "Julia Ulziisaikhan"
+date: "6/15/2022"
+output: html_document
+---
+
+Loading in required packages.
+
+```{r, warning=F, error=F}
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+library(janitor)
+library(lubridate)
+path <- "C:/Users/ulzii/OneDrive/Documents/spring22/tuttle/wikidata_analysis"
+setwd(path)
+```
+
+We have 4 data sets:
+1. Tibetan figures data from the [Buddhist Digital Resource Center](https://www.bdrc.io/) (BDRC).  
+2. Chinese monk data from the Dharma Drum Authority (DDM), specifically their [Buddhist Studies Person Authority Database](https://authority.dila.edu.tw/person/). 
+3. Chinese civil servant data from the Harvard University Yenching Institute's [China Biographical Database Project](https://projects.iq.harvard.edu/cbdb) (CBDB). 
+4. European figure data from WikiData using the WikiData query
+
+
+The following are the general data processing steps:
+1. Extract the years from the person's birth and death date.
+2. Create a `lifespan` column from subtracting the person's death year from their birth year.
+3. Exclude persons with no `lifespan` information. 
+4. Exclude persons with a `lifespan` less than 0 or greater than 120.
+5. Bind the rows of each
+
+
+
+# WikiData
+
+## Data Processing
+
+Our lifespan column is calculated from subtracting the person's birth year from the death year. We exclude persons with lifespans less than 0. Because there can be multiple entries for the same person, we extract only the first occurrence of that person based on their WikiData URL/ID.
+
+```{r}
+#functions
+blank2na <- function(field){
+  output <- ifelse(field=="", NA, field)
+  return(output)
+}
+
+raw2df <- function(dat){
+  df <- 
+    dat %>%
+    clean_names() %>%
+    mutate(age = yod - yob,
+           occupation_label=blank2na(occupation_label),
+           citizen_label=blank2na(citizen_label),
+           birthcountry_label = blank2na(birthcountry_label)
+           ) %>%
+    filter(!is.na(age)) %>%
+    filter(age>=0) %>%
+    group_by(item) %>%
+    slice(1) %>%
+    ungroup() %>%
+    relocate(age, .after=yod) %>%
+    relocate(item, .after=birthcountry_label) %>%
+    arrange(yob) 
+  return(df)
+}
+```
+
+France, Germany, Russia, Italy, UK, Spain, Greece, Portugal
+
+```{r}
+#load in data
+wikidata_raw <- read.csv("data/wikidata_raw.csv")
+```
+
+```{r}
+wikidata <- raw2df(wikidata_raw)
+paste0("nrow pre-processing: ", nrow(wikidata_raw), " | ", 
+      "post-processing: ", nrow(wikidata))
+colnames(wikidata)
+```
+
+We remove the country of citizenship column and instead assign country of birth as the person's associated country. `id` refers to the WikiData link for the given person's entry. 
+
+```{r}
+wikidata$citizen_label <- NULL
+colnames(wikidata) <- c("name", "birth", "death", "lifespan", "occupation", "country", "id")
+wikidata$dataset <- "wikidata"
+head(wikidata)
+```
+
+## Categorizing occupation as religious or not.
+
+```{r}
+(unique(wikidata$occupation))
+```
+
+
+## Data Quality and Exploration
+
+```{r}
+dim(wikidata)
+range(wikidata$birth)
+range(wikidata$death)
+range(wikidata$lifespan)
+```
+
+There are 2,921 persons in our European persons data set. The minimum and maximum values for the birth year column are -800 and 2010, and -760 and 2038 for the death year column. The quality of the data is questionable, as there is a person with a death year of 2038, which is not in the past. In addition, I display the entries with a lifespan of 0 below. The birth and death years for most of them seem too conveniently located at the start of each century, and their birth and death year information is questionable as the occupations indicate they should at least be adults or children, not persons of lifespan of 0 years.
+
+```{r}
+filter(wikidata, lifespan==0)
+```
+
+There are 421 different occupations in the dataset. The most common ones are painter, actor, Catholic priest, military personnel, and politician. The possibility of overlap between the occupation labels, or synonymous terms, have not been explored here (eg. I noticed the labels "priest" and "Catholic priest" in the data) 
+
+```{r}
+length(unique(wikidata$occupation))
+```
+
+```{r}
+wikidata %>% 
+  filter(!is.na(occupation)) %>%
+  group_by(occupation) %>%
+  summarise(count = n()) %>%
+  arrange(-count) %>%
+  top_n(n = 5, wt = count)
+```
+
+The majority of the persons come from (more specifically, were born in) Germany, France, and the UK.
+
+```{r}
+wikidata %>% 
+  group_by(country) %>%
+  summarise(count = n()) %>%
+  arrange(-count) %>%
+  top_n(n = 8, wt = count)
+```
+
+## Example Plot
+
+A scatter plot of the data, with a moving average line in blue. We limit the x-axis to [1500,2022] as most of the data is concentrated in that timeframe. We limit the upper bound to 120, as lifespans above 120 may seem nonsensical. 
+
+A horizontal strip of deaths can be noticed around the time of World War 2. The European longevity trend appears to be relatively flat around 55-60 years from 1500 to 1950. After 1950, the average longevity increases to a peak of around 75, but appears to flatten around the new millenia.
+
+```{r}
+plot <- 
+  ggplot(data=wikidata, aes(x=death, y=lifespan)) +
+  geom_point(alpha=0.2) +
+  ggtitle("European Lifespans") +
+  theme_bw()  +
+  ylab("Lifespan") +
+  scale_x_continuous(breaks = seq(-800, max(df$death), 200), name = "Year of Death")
+```
+
+```{r, warning=F, message=F}
+plot + 
+  scale_x_continuous(breaks = seq(1000, 2000, 100), limits=c(1500,2022), name = "Year of Death") +
+  scale_y_continuous(breaks = seq(0, 120, 10), limits=c(0,120)) +
+  geom_smooth(method="loess", se = FALSE) + 
+  labs(caption = "Lifespan [0, 120]\nYear of Death [1500, 2000]")
+```
+
+
+
+# BDRC
+
+```{r}
+bdrc_raw <- read.csv("data/bdrc_raw.csv")
+colnames(bdrc_raw)
+colnames(bdrc_raw) <- c("id", "name", "birth", "death", "seats")
+bdrc <- mutate(bdrc_raw, lifespan = death - birth)
+```
+
+Removing duplicates. Excluding rows that have a lifespan out of the range 0, 120. Adding dataset and country labels.
+```{r}
+bdrc <- bdrc[(!duplicated(bdrc$id)),]
+bdrc <- filter(bdrc, (lifespan > 0 & lifespan <=120))
+bdrc$dataset <- "BDRC"
+bdrc$country <- "Tibet"
+```
+
+```{r}
+paste0("nrow pre-processing: ", nrow(bdrc_raw), " | ", 
+      "post-processing: ", nrow(bdrc))
+```
+
+```{r}
+head(bdrc)
+```
+
+
+# CBDB
+
+Loading in the raw data, and the ethnicity code table. Ethnicity codes of 0 and 1 indicate unknown, and Han respectively.
+
+```{r}
+cbdb_raw <- read.csv("data/cbdb_raw.csv")
+eth <- 
+  read.csv("data/cbdb_ethnicity_codes.csv") %>% 
+  select(c_ethnicity_code, c_name, c_group_code)
+head(eth, 4)
+```
+
+We exclude persons with no lifespan information, and persons of non-Han or non-Unknown ethnicity, to make sure we filter out as many non-Han ethnicities as possible, like Tibetan or Mongolian. We keep persons with unknown ethnicity as it is the most prevalent value in the data.
+
+```{r}
+cbdb_raw %>% group_by(c_ethnicity_code) %>% summarise(count_of_persons=n()) %>% arrange(-count_of_persons) %>% head(3)
+```
+
+
+
+```{r}
+cbdb <- 
+  cbdb_raw %>% 
+  mutate(lifespan = c_deathyear-c_birthyear) %>% 
+  filter(!is.na(lifespan)) %>%
+  select(c_personid, c_name, c_birthyear, c_deathyear, lifespan, c_ethnicity_code) %>% 
+  left_join(select(eth, -c_name), by = "c_ethnicity_code") %>%
+  mutate(c_personid = as.character(c_personid)) %>%
+  filter(c_ethnicity_code == 0 | c_ethnicity_code == 1) %>%
+  filter(lifespan >= 0 & lifespan <= 120) %>%
+  select(-c_ethnicity_code, -c_group_code)
+
+colnames(cbdb) <- c("id", "name", "birth", "death", "lifespan")
+cbdb$dataset <- "CBDB"
+cbdb$country <- "China"
+cbdb$occupation <- "Civil Servant"
+head(cbdb)
+```
+
+
+```{r}
+paste0("nrow pre-processing: ", nrow(cbdb_raw), " | ", 
+      "post-processing: ", nrow(cbdb))
+```
+
+
+# DDM
+
+Chinese characters appear strangely in R, but returns to its character format when opened in Excel.
+
+```{r}
+ddm_raw <- read.csv("data/ddm_raw.csv")
+colnames(ddm_raw) <- c("id", "name", "birth_range", "death_range")
+head(ddm_raw)
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+# function to extract year from string
+
+year_extractor <- function(string){ 
+  #Notes:
+  #1. this function takes in strings in the format of "-YYYY-MM-DD" and
+  #   accounts for negative years (i.e. BC years)
+  #
+  #2. if a string not in the format mentioned above passes through
+  #   this function, then NA will be returned, with no warning.
+  date <- trimws(string, which = "both")
+  year <- ifelse(
+                 (nchar(date)<=5), 
+                 as.numeric(date), 
+                 ifelse(
+                     substring(date, 1, 1) == "-",
+                     paste0("-", lubridate::year(ymd(date))) %>% as.numeric(),
+                     year(lubridate::ymd(date)))) %>% suppressWarnings()
+  return(year)
+}
+
+# test
+year_extractor("+1729-12-31 ")
+```
+
+Splitting the birth range and death range columns into separate columns, then extracting the year out of each column. We create a lifespan column, from death_range_1 minus birth_range_1. We filter rows only containing lifespan between 0 and 120. We exclude rows with a birth_range or death_range larger than 1 year.
+
+```{r}
+ddm <- 
+  mutate(ddm_raw, 
+       birth_range = gsub("[~]", "", birth_range), 
+       death_range = gsub("[~]", "", death_range)) %>%
+  splitstackshape::cSplit(.,grep("range", names(.))," ",stripWhite=T) %>%
+  mutate_if(is.factor, as.character) %>%
+  mutate(across(contains("range"), year_extractor)) %>%
+  mutate(lifespan = death_range_1 - birth_range_1,
+         birth_diff = birth_range_2 - birth_range_1,
+         death_diff = death_range_2 - death_range_1) %>%
+ # select(id, name, birth_range_1, death_range_1, lifespan) %>%
+  filter(lifespan >= 0 & lifespan <= 120 
+         & birth_diff %in% c(NA, 0, 1) & death_diff %in% c(NA, 0, 1)) %>%
+  select(id, name, birth_range_1, death_range_1, lifespan) 
+```
+
+
+```{r}
+paste0("nrow pre-processing: ", nrow(ddm_raw), " | ", 
+      "post-processing: ", nrow(ddm))
+```
+```{r}
+colnames(ddm) <- c("id", "name", "birth", "death", "lifespan")
+ddm$dataset <- "DDM"
+ddm$country <- "China"
+ddm$occupation <- "Monk"
+head(ddm)
+```
+
+# NAMPI
+
+```{r}
+nampi_raw <- read.csv("data/nampi_raw.csv", header=T, na.strings=c("","NA"))
+colnames(nampi_raw)
+dim(nampi_raw)
+```
+
+```{r}
+nampi_raw %>%
+  mutate(born_on=ifelse(is.na(born_on),born_not_later,born_on), 
+         born_on=ifelse(is.na(born_on),born_not_earlier,born_on),
+         died_on=ifelse(is.na(died_on),died_not_later,died_on),
+         died_on=ifelse(is.na(died_on),died_not_earlier,died_on),
+         born_on=as.numeric(born_on),
+         died_on=as.numeric(died_on),
+         lifespan=died_on-born_on) %>%
+  select(person, name, born_on, died_on, died_at, died_at_id, born_at_id, statuses, occupations, X)
+```
+
+

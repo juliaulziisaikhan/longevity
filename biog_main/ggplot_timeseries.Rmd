@@ -1,0 +1,195 @@
+---
+title: "ggplot_timeseries"
+author: "julia"
+date: "2022-10-21"
+output: html_document
+---
+This is the main file
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(ggfortify)
+library(changepoint)
+library(strucchange)
+library(ggpmisc)
+```
+
+Loading in data of CBDB, DDM, and BDRC. This table was processed in a different R file.
+
+```{r}
+data <- read.csv("C:/Users/Julia/Documents/GitHub/tibetan-longevity/biog_main/cbdb_ddm_bdrc.csv")
+head(data)
+```
+
+```{r}
+df <- 
+  filter(data, data=="bdrc") %>% 
+  #post 1000
+  filter(., ddate > 1000) %>%
+  select(ddate) %>% 
+  mutate(count = 1) %>% 
+  group_by(ddate) %>% 
+  summarise(count = n()) %>% 
+  rename(year=ddate)
+```
+
+We load in WikiData persons data (European-focus). Below I am
+
+```{r}
+religious_occupations <- c("Catholic priest", "missionary", "priest", "rabbi", "cardinal", "feudatory", "Christian minister", "religious", "pastor", "nun", "monk", 
+                           "Anglican priest", "Latin Catholic priest", "abbess", "Catholic friar", "Catholic theologian", "Christian nun")
+religious_occupations
+
+data_w <- 
+  read.csv("C:/Users/Julia/Documents/GitHub/tibetan-longevity/wikidata_analysis/data/wikidata_raw.csv") %>% 
+  mutate(lifespan = yod - yob) %>%
+  filter(!is.na(lifespan)) %>% 
+  filter(lifespan <= 115 & lifespan > 0) %>%
+  group_by(occupationLabel) %>%
+  #comment out the below lines if you want all occupations! ctrl+shift+c
+  # filter(occupationLabel %in% religious_occupations | occupationLabel=="")%>%
+  rename(
+    bdate = yob,
+    ddate = yod
+    )
+data_w <- data_w[!duplicated(data_w$itemLabel), ]
+head(data_w)
+nrow(data_w)
+```
+
+
+```{r}
+df_w <-
+  #post 1000
+  filter(data_w, ddate > 1000) %>%
+  select(ddate) %>% 
+  mutate(count = 1) %>% 
+  group_by(ddate) %>% 
+  summarise(count = n()) %>% 
+  rename(year=ddate)
+
+head(df_w)
+```
+
+
+```{r}
+years <- 
+  seq(range(df_w$year)[1], range(df_w$year)[2]) %>% 
+  data.frame() %>% 
+  rename(year=".")
+```
+
+
+```{r}
+df2 <- left_join(years, df, by = c("year"="year"))%>%mutate_all(funs(replace_na(.,0)))
+head(df2)
+```
+
+```{r}
+df2_w <- left_join(years, df_w, by = c("year"="year"))%>%mutate_all(funs(replace_na(.,0)))
+head(df2_w)
+```
+
+
+
+```{r}
+ma <- function(x, n = 5){stats::filter(x, rep(1 / n, n), sides = 2)}
+```
+
+# n = 1
+
+## wiki
+
+##data highly skewed to post 1800
+```{r}
+point <- subset(df2_w, year == 1959)
+df3_w<-df2_w %>% mutate(count=ma(count, n=1))
+
+ggplot(data=df3_w, aes(x=year, y=ma(count, n=1), group=1)) +
+  # geom_bar(stat='identity') +
+  geom_line() +
+  scale_y_continuous(breaks = seq(0, 50, 10), limits=c(0,50), name = "Number of Deaths", expand = c(0, 0)) +
+  scale_x_continuous(breaks = seq(1000, 2100, 100), limits=c(1000,2020), name = "Year", expand = c(0, 0)) +    ggtitle("Plot of number of reported deaths over time") +
+  theme_classic() 
+```
+
+let's limit to priests only and see if it normalizes the data imbalance. i like the following occupations:
+religious: Catholic priest, missionary, priest, rabbi, cardinal, feudatory, Christian minister, religious, pastor, nun, monk, Anglican priest, Latin Catholic priest, abbess, Catholic friar,Catholic theologian, Christian nun
+civil: politician, military personnel, diplomat, military officer, soldier
+art: painter, composer, architect, artist, sculptor, conductor, astronomer
+
+```{r}
+data_w %>% 
+  group_by(occupationLabel) %>% 
+  summarise(n=n()) %>% 
+  arrange(desc(n))
+```
+
+
+
+
+```{r}
+point <- subset(df2_w, year == 1959)
+df3_w<-df2_w %>% mutate(count=ma(count, n=1))
+
+ggplot(data=df3_w, aes(x=year, y=ma(count, n=5), group=1)) +
+  # geom_bar(stat='identity') +
+  geom_line() +
+  scale_y_continuous(breaks = seq(0, 5, 1), limits=c(0,5), name = "Number of Deaths", expand = c(0, 0)) +
+  scale_x_continuous(breaks = seq(1000, 2100, 100), limits=c(1000,2020), name = "Year", expand = c(0, 0)) +    ggtitle("Plot of number of reported deaths over time") +
+  theme_classic() 
+```
+
+## bdrc
+
+```{r}
+point <- subset(df2, year == 1959)
+
+ggplot(data=df2, aes(x=year, y=ma(count, n=1), group=1)) +
+  # geom_bar(stat='identity') +
+  geom_line() +
+  scale_y_continuous(breaks = seq(0, 50, 10), limits=c(0,50), name = "Number of Deaths", expand = c(0, 0)) +
+  scale_x_continuous(breaks = seq(1000, 2100, 100), limits=c(1900,2020), name = "Year", expand = c(0, 0)) +    ggtitle("Plot of number of reported deaths over time") +
+  theme_classic() + 
+ geom_point(data=point, colour="red") +  # this adds a red point
+  geom_text(data=point, label="1959", vjust=-.5, colour="red") # this adds a label for the red point
+```
+
+# n = 2
+
+```{r}
+ex <- data.frame(year = 1, count = 3)
+print(ex)
+```
+
+
+```{r}
+df3<-df2 %>% mutate(count=ma(count, n=2))
+point3 <- data.frame(year = 1958, count = 36.2)
+
+ggplot(data=df3, aes(x=year, y=count, group=1)) +
+  geom_line() +
+  scale_y_continuous(breaks = seq(0, 40, 10), limits=c(0,40), name = "Number of Deaths", expand = c(0, 0)) +
+  scale_x_continuous(breaks = seq(1000, 2100, 100), limits=c(1500,2020), name = "Year", expand = c(0, 0)) + ggtitle("Reported deaths over time") +
+  theme_classic()+ 
+  geom_point(data=point3, colour="red") +  # this adds a red point
+  geom_text(data=point3, label="1959", vjust=-.5, colour="red") # this adds a label for the red point
+```
+
+
+
+```{r}
+bdrc_ts <- ts(df2$count, frequency=1, start=1000)
+autoplot(bdrc_ts)
+```
+```{r}
+bdrc_ts %>%
+  changepoint:: cpt.meanvar() %>%  # Identify change points
+  autoplot()
+
+strucchange::breakpoints(bdrc_ts ~ 1) %>%
+  autoplot()
+```
+
+
