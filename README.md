@@ -13,6 +13,7 @@ Our sample includes Tibetan lamas and figures, Chinese civil servants and bureau
 * China Biographical Database Project (CBDB), [Harvard](https://projects.iq.harvard.edu/cbdb/home)
 * Dharma Drum Authority (DDA)[^2], [New Taipei City](https://authority.dila.edu.tw/person/)
 * WikiData Query Service, [San Francisco](https://query.wikidata.org/)
+* Nuns and Monks - Prosopographical Interfaces (NAMPI), [Vienna](https://data.nampi.icar-us.eu/)
 
 ## Resources
 
