@@ -2,7 +2,7 @@
 
 > The causes of death are numerous, yet the causes of life are few.[^1]
 
-A exploratory project aiming to compare the longevity of various groups. 
+An exploratory project aiming to capture and compare the longevity of various groups. 
 
 ## Data
 
